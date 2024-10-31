@@ -1,0 +1,10 @@
+body {
+    background-image: url('/bg.jpg');
+    background-size: cover; /* Or contain based on your needs */
+    background-position: center;
+    height: 100vh;
+    background-attachment: fixed; /* Keeps the background fixed during scroll */
+    margin: 0; /* Ensure there's no margin around the body */
+  align-items: center; /* Center vertically */
+  justify-content: center; /* Center horizontally */
+}
