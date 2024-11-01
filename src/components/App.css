@@ -8,3 +8,25 @@ body {
   align-items: center; /* Center vertically */
   justify-content: center; /* Center horizontally */
 }
+/* Styles for the loading overlay */
+.loading-screen {
+  position: fixed; /* Fixed position to cover entire viewport */
+  top: 0;
+  left: 0;
+  width: 100vw; /* Full width of the viewport */
+  height: 100vh; /* Full height of the viewport */
+  background-color: rgba(0, 0, 0, 0.7); /* Black background with opacity */
+  display: flex;
+  align-items: center; /* Center vertically */
+  justify-content: center; /* Center horizontally */
+  z-index: 1000; /* High z-index to overlay all content */
+  pointer-events: auto; /* Enables pointer events on the loading screen */
+}
+
+/* Text or animation in the loading screen */
+.loading-screen::after {
+  content: 'Loading...'; /* Display loading text */
+  color: white;
+  font-size: 1.5rem;
+  text-align: center;
+}

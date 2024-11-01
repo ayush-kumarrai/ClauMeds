@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css'; // Adjust the path as necessary
 
 
@@ -8,10 +8,25 @@ const MedicalReportAnalyzer = () => {
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [translation, setTranslation] = useState(null);
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  
+
 
   // Updated API configuration with new model
   const API_KEY = 'AIzaSyBMf2LoAeGhHBcWFrEsgg1sdlopHphPmsQ';
   const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
+
+
+  const languages = [
+    { code: 'en', name: 'English' },
+    { code: 'hi', name: 'Hindi' },
+    { code: 'bho', name: 'Bhojpuri' },
+  ];
+
 
   const styles = {
     container: {
@@ -29,7 +44,70 @@ const MedicalReportAnalyzer = () => {
         boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)', // Shadow effect
       }
       
-      ,
+      ,languageControls: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '15px',
+      marginBottom: '20px',
+      padding: '10px',
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      borderRadius: '8px',
+      position: 'relative',
+    },
+    languageSelector: {
+      position: 'relative',
+      display: 'inline-block',
+    },
+    languageButton: {
+      padding: '8px 15px',
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+      border: '1px solid rgba(255, 255, 255, 0.3)',
+      borderRadius: '4px',
+      color: 'white',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+    },
+    dropdownContent: {
+      display: 'none',
+      position: 'absolute',
+      backgroundColor: 'rgba(0, 0, 0, 0.9)',
+      minWidth: '160px',
+      boxShadow: '0px 8px 16px 0px rgba(0,0,0,0.2)',
+      borderRadius: '4px',
+      zIndex: 1,
+    },
+    dropdownContentShow: {
+      display: 'block',
+    },
+    dropdownItem: {
+      color: 'white',
+      padding: '12px 16px',
+      textDecoration: 'none',
+      display: 'block',
+      cursor: 'pointer',
+      textAlign: 'left',
+      '&:hover': {
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      },
+    },
+    speakerButton: {
+      backgroundColor: 'transparent',
+      border: 'none',
+      cursor: 'pointer',
+      padding: '8px',
+      borderRadius: '50%',
+      color: 'white',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'background-color 0.3s',
+      '&:hover': {
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      },
+    },
     uploadArea: {
       border: '2px dashed #cccccc',
       borderRadius: '8px',
@@ -225,14 +303,222 @@ const MedicalReportAnalyzer = () => {
       .replace(/##\s(.*?)(\n|$)/g, '<span style="font-style: italic; font-weight: bold;">$1</span><br>'); // Style full line after ##
 };
 
+const translateAnalysis = async (text, targetLang) => {
+  if (targetLang === 'en') {
+    setTranslation(null);
+    return;
+  }
+
+  try {
+    const translationPrompt = `
+        Translate this medical report to ${languages.find(l => l.code === targetLang).name}. 
+        Important instructions:
+        1. Convert ALL text to ${languages.find(l => l.code === targetLang).name} script
+        2. Translate medical terms to common ${languages.find(l => l.code === targetLang).name} terms that people understand
+        3. Maintain the formatting but convert everything including:
+           - Numbers should be written in ${languages.find(l => l.code === targetLang).name} numerals if applicable
+           - Convert all technical terms to their ${languages.find(l => l.code === targetLang).name} equivalents
+           - Keep the structure but make it natural in ${languages.find(l => l.code === targetLang).name}
+
+        Text to translate:
+        ${text}
+      `;
+
+    const response = await fetch(`${API_URL}?key=${API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: translationPrompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 2048
+        }
+      })
+    });
+
+    const data = await response.json();
+      if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
+        const translatedText = data.candidates[0].content.parts[0].text;
+        const cleanedTranslation = translatedText
+        
+        setTranslation(cleanedTranslation);
+
+        // If currently speaking, restart with new translation
+        if (isSpeaking) {
+          window.speechSynthesis.cancel();
+          setTimeout(() => window.speechSynthesis.speak(utterance), 100);
+        }
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+      setError('Translation failed. Please try again.');
+    }
+  };
+
+
+// Handle language change
+const handleLanguageChange = async (code) => {
+  setSelectedLanguage(code);
+  setShowLanguageDropdown(false);
+  setIsLoading(true);
+  if (isSpeaking) {
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  }
+
+  // Translate the content
+  if (analysis) {
+    await translateAnalysis(analysis, code);
+  }
+
+  // Hide loading screen after 8 seconds
+  setTimeout(() => {
+    setIsLoading(false);
+  }, 8000); // Adjust to 10,000 for a 10-second timeout if preferred
+};
+
+// Text-to-speech function
+const speak = (text) => {
+  if ('speechSynthesis' in window) {
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance();
+    
+    // Set the text and language
+    utterance.text = translation || text;
+
+    // Language mapping
+    const langMapping = {
+      'hi': 'hi-IN',
+      'bho': 'hi-IN', // Fallback to Hindi for Bhojpuri
+      'bn': 'bn-IN',
+      'gu': 'gu-IN',
+      'mr': 'mr-IN',
+      'pa': 'pa-IN',
+      'ta': 'ta-IN',
+      'te': 'te-IN',
+      'en': 'en-US'
+    };
+
+    utterance.lang = langMapping[selectedLanguage] || 'en-US';
+
+    // Get available voices
+    const voices = window.speechSynthesis.getVoices();
+    
+    // Try to find a voice for the selected language
+    const voice = voices.find(v => v.lang.startsWith(langMapping[selectedLanguage]) || v.lang.startsWith(selectedLanguage));
+    if (voice) {
+      utterance.voice = voice;
+    }
+
+    // Adjust speech parameters for better results
+    utterance.rate = 0.9; // Slightly slower rate
+    utterance.pitch = 1;
+    
+    utterance.onend = () => {
+      setIsSpeaking(false);
+    };
+
+    utterance.onerror = (event) => {
+      setIsSpeaking(false);
+      setError('Text-to-speech failed. Please try again.');
+    };
+    
+
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    } else {
+      // Add a small delay to ensure voices are loaded
+      setTimeout(() => {
+        window.speechSynthesis.speak(utterance);
+        setIsSpeaking(true);
+      }, 100);
+    }
+  } else {
+    setError('Text-to-speech is not supported in your browser.');
+  }
+};
+
+// Add this useEffect to load voices when component mounts
+useEffect(() => {
+  let voices = [];
+
+  const loadVoices = () => {
+    voices = window.speechSynthesis.getVoices();
+    console.log('Available voices:', voices);
+  };
+
+  loadVoices();
+  
+  if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }
+
+  return () => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  };
+}, []);
+
+
   return (
     <div style={styles.mainn}>
+      {isLoading && <div className="loading-screen"></div>}
      <div style={styles.container}>
       <h1>Medical Report Analyzer</h1>
-      
-      {/* Debugging Information */}
+
+
+      <div style={styles.languageControls}>
+        <div style={styles.languageSelector}>
+          <button 
+            style={styles.languageButton}
+            onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
+          >
+            <span role="img" aria-label="globe">🌐</span>
+            {languages.find(l => l.code === selectedLanguage)?.name}
+          </button>
+          <div style={{
+            ...styles.dropdownContent,
+            ...(showLanguageDropdown ? styles.dropdownContentShow : {})
+          }}>
+            {languages.map((lang) => (
+              <div
+                key={lang.code}
+                style={styles.dropdownItem}
+                onClick={() => handleLanguageChange(lang.code)}
+              >
+                {lang.name}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {(analysis || translation) && (
+          <button
+            onClick={() => speak(translation || analysis)}
+            style={styles.speakerButton}
+            title={isSpeaking ? 'Stop Speaking' : 'Start Speaking'}
+          >
+            <span role="img" aria-label={isSpeaking ? 'mute' : 'speak'}>
+              {isSpeaking ? '🔇 Pause Listening' : '🔊 Start Listening'}
+            </span>
+          </button>
+        )}
+      </div>
+
+
       {error && (
         <div style={{
+          display: 'none',
           backgroundColor: '#ffeeee',
           border: '1px solid red',
           padding: '10px',
@@ -307,7 +593,7 @@ const MedicalReportAnalyzer = () => {
       )}
 
       {/* Analysis Results */}
-      {analysis && (
+      {(analysis || translation) && (
         <div style={styles.analysisCard}>
           <h2>Analysis Results</h2>
           <p dangerouslySetInnerHTML={{ __html: formatAnalysis(analysis) }}></p>
